@@ -1,0 +1,334 @@
+{% extends "layout.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import timestamp, tag_list, post_actions, post_form_fields, comment_item with context %}
+{% set is_owner = current_user and current_user.id == post.user_id %}
+{% block content %}
+    <article class="content-section post-full py-4 px-3 px-md-4 mb-4"
+             aria-labelledby="postTitle">
+        <header class="d-flex align-items-center gap-3 mb-3">
+            <a href="{{ url_for('user_posts', user_id=post.author.id) }}"
+               tabindex="-1"
+               aria-hidden="true">
+                <img class="rounded-circle article-img"
+                     src="{{ post.author.image_path }}"
+                     alt=""
+                     width="64"
+                     height="64">
+            </a>
+            <div class="flex-grow-1 min-w-0">
+                <a class="fw-semibold" href="{{ url_for('user_posts', user_id=post.author.id) }}">{{ post.author.username }}</a>
+                <div class="text-body-secondary small">
+                    {{ timestamp(post.date_posted) }} · {{ post.reading_time }} min read
+                </div>
+            </div>
+        </header>
+        <h1 id="postTitle" class="article-title mb-3">{{ post.title }}</h1>
+        {% if post.image_path %}
+            <img class="post-full-img mb-3"
+                 src="{{ post.image_path }}"
+                 alt="Image for “{{ post.title }}”">
+        {% endif %}
+        <div class="markdown-body article-content mb-3">{{ post.content_html | safe }}</div>
+        {{ tag_list(post.tags, class="mb-3") }}
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 pt-3 border-top">
+            {{ post_actions(post, current_user) }}
+            {% if is_owner %}
+                <div class="d-flex gap-2">
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary"
+                            data-bs-toggle="modal"
+                            data-bs-target="#editModal">{{ icon("edit", size=14) }} Edit</button>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-danger"
+                            id="deletePostBtn">{{ icon("trash", size=14) }} Delete</button>
+                </div>
+            {% endif %}
+        </div>
+    </article>
+    <!-- Comments -->
+    <section class="content-section py-3 px-3 px-md-4 mb-4"
+             id="comments"
+             aria-labelledby="commentsHeading">
+        <h2 id="commentsHeading" class="h4 mb-0">
+            Comments <span class="text-body-secondary" id="commentsCount">({{ comments_total }})</span>
+        </h2>
+        <ul id="commentsList"
+            class="list-unstyled comment-list mb-0"
+            data-post-id="{{ post.id }}"
+            data-next-skip="{{ comments | length }}">
+            {% for comment in comments %}{{ comment_item(comment, post, current_user) }}{% endfor %}
+        </ul>
+        <p id="noComments"
+           class="text-body-secondary py-3 mb-0 {{ 'd-none' if comments }}">
+            No comments yet. Start the conversation!
+        </p>
+        {% if comments_has_more %}
+            <div class="text-center py-2">
+                <button type="button"
+                        class="btn btn-sm btn-outline-primary"
+                        id="loadMoreComments">Show more comments</button>
+            </div>
+        {% endif %}
+        <div class="border-top pt-3 mt-2">
+            {% if current_user %}
+                <form id="commentForm" novalidate>
+                    <label for="commentContent" class="form-label">Add a comment</label>
+                    <textarea id="commentContent"
+                              class="form-control mb-2"
+                              name="content"
+                              rows="3"
+                              maxlength="2000"
+                              required
+                              placeholder="Share your thoughts…"
+                              aria-describedby="commentCounter"></textarea>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small id="commentCounter"
+                               class="text-body-secondary char-counter"
+                               data-counter-for="commentContent">0/2000</small>
+                        <button type="submit" class="btn btn-primary btn-sm">Post comment</button>
+                    </div>
+                </form>
+            {% else %}
+                <p class="mb-0">
+                    <a href="{{ url_for('login_page') }}?next={{ request.url.path | urlencode }}">Log in</a> to join the conversation.
+                </p>
+            {% endif %}
+        </div>
+    </section>
+    {% if is_owner %}
+        <!-- Edit Post Modal -->
+        <div class="modal fade"
+             id="editModal"
+             tabindex="-1"
+             aria-labelledby="editModalLabel"
+             aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title h5" id="editModalLabel">Edit Post</h2>
+                        <button type="button"
+                                class="btn-close"
+                                data-bs-dismiss="modal"
+                                aria-label="Close"></button>
+                    </div>
+                    <form id="editPostForm" class="post-form" novalidate>
+                        <div class="modal-body">{{ post_form_fields("edit", post) }}</div>
+                        <div class="modal-footer">
+                            <button type="button"
+                                    class="btn btn-outline-secondary"
+                                    data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endblock content %}
+{% block scripts %}
+    <script type="module">
+    import { initPostForm, submitPostForm } from '/static/js/app.js';
+    import {
+        apiFetch, confirmDialog, hideModal, queueToast, readError, showToast,
+        updateRelativeTimes, announce, initCharCounters,
+    } from '/static/js/utils.js';
+
+    const postId = {{ post.id }};
+
+    // Edit Post
+    const editForm = document.getElementById('editPostForm');
+    if (editForm) {
+        initPostForm(editForm);
+        editForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const ok = await submitPostForm(editForm, {
+                url: `/api/posts/${postId}`,
+                method: 'PATCH',
+                postId,
+            });
+            if (ok) {
+                hideModal('editModal');
+                queueToast('Post updated!');
+                window.location.reload();
+            }
+        });
+    }
+
+    // Delete Post
+    document.getElementById('deletePostBtn')?.addEventListener('click', async () => {
+        const confirmed = await confirmDialog({
+            title: 'Delete post?',
+            message: 'This post and all of its comments will be permanently deleted.',
+            confirmText: 'Delete post',
+        });
+        if (!confirmed) return;
+
+        try {
+            const response = await apiFetch(`/api/posts/${postId}`, { method: 'DELETE' });
+            if (response.status === 204) {
+                queueToast('Post deleted.');
+                window.location.href = '/';
+            } else {
+                showToast(await readError(response), 'error');
+            }
+        } catch (error) {
+            if (error.name !== 'AuthRedirectError') {
+                showToast('Network error. Please check your connection and try again.', 'error');
+            }
+        }
+    });
+
+    // Comments
+    const commentsList = document.getElementById('commentsList');
+    const commentsCount = document.getElementById('commentsCount');
+    const noComments = document.getElementById('noComments');
+    let totalComments = {{ comments_total }};
+
+    function setCommentCount(delta) {
+        totalComments += delta;
+        commentsCount.textContent = `(${totalComments})`;
+        noComments.classList.toggle('d-none', totalComments > 0);
+    }
+
+    async function appendComment(commentId) {
+        const response = await fetch(`/partials/comments/${commentId}`);
+        commentsList.insertAdjacentHTML('beforeend', await response.text());
+        const item = document.getElementById(`comment-${commentId}`);
+        updateRelativeTimes(item);
+        return item;
+    }
+
+    const commentForm = document.getElementById('commentForm');
+    if (commentForm) {
+        initCharCounters(commentForm);
+        commentForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const textarea = commentForm.querySelector('textarea');
+            const content = textarea.value.trim();
+            if (!content) {
+                textarea.classList.add('is-invalid');
+                textarea.focus();
+                return;
+            }
+            textarea.classList.remove('is-invalid');
+
+            const button = commentForm.querySelector('button[type="submit"]');
+            button.disabled = true;
+            try {
+                const response = await apiFetch(`/api/posts/${postId}/comments`, {
+                    method: 'POST',
+                    json: { content },
+                });
+                if (response.ok) {
+                    const comment = await response.json();
+                    commentForm.reset();
+                    commentForm.querySelector('[data-counter-for]').textContent = '0/2000';
+                    const item = await appendComment(comment.id);
+                    setCommentCount(1);
+                    item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    announce('Comment posted');
+                } else {
+                    showToast(await readError(response), 'error');
+                }
+            } catch (error) {
+                if (error.name !== 'AuthRedirectError') {
+                    showToast('Network error. Please check your connection and try again.', 'error');
+                }
+            } finally {
+                button.disabled = false;
+            }
+        });
+    }
+
+    // Edit / delete individual comments (event delegation)
+    commentsList.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-action]');
+        if (!button) return;
+        const item = button.closest('.comment');
+        const commentId = item.dataset.commentId;
+
+        if (button.dataset.action === 'delete-comment') {
+            const confirmed = await confirmDialog({
+                title: 'Delete comment?',
+                message: 'This comment will be permanently removed.',
+                confirmText: 'Delete',
+            });
+            if (!confirmed) return;
+            const response = await apiFetch(`/api/comments/${commentId}`, { method: 'DELETE' });
+            if (response.status === 204) {
+                item.remove();
+                setCommentCount(-1);
+                showToast('Comment deleted.');
+            } else {
+                showToast(await readError(response), 'error');
+            }
+        }
+
+        if (button.dataset.action === 'edit-comment') {
+            const contentEl = item.querySelector('.comment-content');
+            if (item.querySelector('.comment-edit')) return;
+
+            const form = document.createElement('form');
+            form.className = 'comment-edit mb-2';
+            form.innerHTML = `
+                <label class="visually-hidden" for="edit-comment-${commentId}">Edit comment</label>
+                <textarea id="edit-comment-${commentId}" class="form-control mb-2" rows="3" maxlength="2000" required></textarea>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-cancel>Cancel</button>
+                </div>`;
+            const textarea = form.querySelector('textarea');
+            textarea.value = contentEl.textContent;
+            contentEl.classList.add('d-none');
+            contentEl.after(form);
+            textarea.focus();
+
+            const close = () => { form.remove(); contentEl.classList.remove('d-none'); };
+            form.querySelector('[data-cancel]').addEventListener('click', close);
+            form.addEventListener('submit', async (submitEvent) => {
+                submitEvent.preventDefault();
+                const content = textarea.value.trim();
+                if (!content) return;
+                const response = await apiFetch(`/api/comments/${commentId}`, {
+                    method: 'PATCH',
+                    json: { content },
+                });
+                if (response.ok) {
+                    const updated = await response.json();
+                    contentEl.textContent = updated.content;
+                    close();
+                    if (!item.querySelector('.fst-italic')) {
+                        item.querySelector('time').parentElement.insertAdjacentHTML(
+                            'afterend', '<small class="text-body-secondary fst-italic">(edited)</small>');
+                    }
+                    showToast('Comment updated.');
+                } else {
+                    showToast(await readError(response), 'error');
+                }
+            });
+        }
+    });
+
+    // Load older comments
+    const loadMoreComments = document.getElementById('loadMoreComments');
+    loadMoreComments?.addEventListener('click', async () => {
+        loadMoreComments.disabled = true;
+        loadMoreComments.textContent = 'Loading…';
+        try {
+            const skip = commentsList.querySelectorAll('.comment').length;
+            const response = await fetch(`/partials/posts/${postId}/comments?skip=${skip}`);
+            if (!response.ok) throw new Error('Failed to load comments');
+            commentsList.insertAdjacentHTML('beforeend', await response.text());
+            updateRelativeTimes(commentsList);
+            if (response.headers.get('X-Has-More') !== 'true') {
+                loadMoreComments.parentElement.remove();
+            }
+        } catch {
+            showToast("Couldn't load more comments. Please try again.", 'error');
+        } finally {
+            loadMoreComments.disabled = false;
+            loadMoreComments.textContent = 'Show more comments';
+        }
+    });
+    </script>
+{% endblock scripts %}

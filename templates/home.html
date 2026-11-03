@@ -1,0 +1,28 @@
+{% extends "post_list.html" %}
+{% from "_macros.html" import empty_state with context %}
+{% block list_header %}
+    {% if current_user %}
+        <ul class="nav nav-underline mb-3" aria-label="Choose feed">
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if active_tab == 'all' }}"
+                   {% if active_tab == 'all' %}aria-current="page"{% endif %}
+                   href="{{ url_for('home') }}">Latest</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {{ 'active' if active_tab == 'feed' }}"
+                   {% if active_tab == 'feed' %}aria-current="page"{% endif %}
+                   href="{{ url_for('feed_page') }}">Following</a>
+            </li>
+        </ul>
+    {% endif %}
+    <h1 class="visually-hidden">{{ 'Posts from people you follow' if active_tab == 'feed' else 'Latest posts' }}</h1>
+{% endblock list_header %}
+{% block empty %}
+    {% if active_tab == 'feed' %}
+        {{ empty_state(empty_message, icon_name="users", action_url=url_for('home'), action_label="Browse latest posts") }}
+    {% elif current_user %}
+        {{ empty_state(empty_message, action_modal="createPostModal", action_label="Write a post") }}
+    {% else %}
+        {{ empty_state(empty_message, action_url=url_for('register_page'), action_label="Join to post") }}
+    {% endif %}
+{% endblock empty %}

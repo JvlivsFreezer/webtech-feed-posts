@@ -1,0 +1,2 @@
+{% from "_macros.html" import post_card with context %}
+{% for post in posts %}{{ post_card(post, current_user) }}{% endfor %}

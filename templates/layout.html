@@ -1,0 +1,328 @@
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import post_form_fields with context %}
+{% set path = request.url.path %}
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <!-- Site Info -->
+        {% if title %}
+            <title>{{ title }} · {{ site_name }}</title>
+        {% else %}
+            <title>{{ site_name }}</title>
+        {% endif %}
+        <meta name="description"
+              content="{{ description or site_name ~ ' - a community blog built with FastAPI' }}">
+        <!-- Open Graph Tags: used for link previews on social media -->
+        <meta property="og:title" content="{{ title or site_name }}">
+        <meta property="og:type" content="{{ 'article' if post else 'website' }}">
+        <meta property="og:site_name" content="{{ site_name }}">
+        <meta property="og:url" content="{{ request.url }}">
+        {% if description %}<meta property="og:description" content="{{ description }}">{% endif %}
+        {% if post and post.image_path %}
+            <meta property="og:image"
+                  content="{{ request.base_url }}{{ post.image_path[1:] }}">
+        {% endif %}
+        <!-- Apply the saved theme before first paint to avoid a light/dark flash -->
+        <script>
+            (() => {
+                let theme = 'auto';
+                try { theme = localStorage.getItem('theme') || 'auto'; } catch {}
+                const dark = theme === 'dark' ||
+                    (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                document.documentElement.setAttribute('data-bs-theme', dark ? 'dark' : 'light');
+            })();
+        </script>
+        <!-- Preconnect for Google Fonts -->
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <!-- Custom Font -->
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Nunito:ital,wght@0,200..1000;1,200..1000&display=swap"
+              rel="stylesheet">
+        <!-- Bootstrap CSS -->
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css"
+              rel="stylesheet"
+              integrity="sha384-sRIl4kxILFvY47J16cr9ZwB07vP4J8+LH7qKQnuqkuIAvNWLzeN8tE5YBujZqJLB"
+              crossorigin="anonymous">
+        <!-- Stylesheet -->
+        <link rel="stylesheet"
+              type="text/css"
+              href="{{ url_for("static", path='css/main.css') }}">
+        <!-- Set a theme color that matches your website's primary color -->
+        <meta name="theme-color" content="#46708f">
+        <!-- Favicon for all browsers -->
+        <link rel="icon"
+              href="{{ url_for('static', path='icons/favicon.ico') }}"
+              sizes="any">
+        <link rel="icon"
+              href="{{ url_for('static', path='icons/icon.svg') }}"
+              type="image/svg+xml">
+        <!-- Apple touch icon for iOS devices -->
+        <link rel="apple-touch-icon"
+              sizes="180x180"
+              href="{{ url_for('static', path='icons/icon.png') }}">
+        <!-- Web app manifest for Progressive Web Apps -->
+        <link rel="manifest"
+              href="{{ url_for('static', path='site.webmanifest') }}">
+    </head>
+    <body class="d-flex flex-column min-vh-100">
+        <a class="skip-link" href="#main-content">Skip to main content</a>
+        <header class="site-header">
+            <nav class="navbar navbar-expand-lg bg-steel fixed-top"
+                 data-bs-theme="dark"
+                 aria-label="Main navigation">
+                <div class="container">
+                    <a class="navbar-brand me-4" href="{{ url_for("home") }}">{{ site_name }}</a>
+                    <button class="navbar-toggler"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#navbarToggle"
+                            aria-controls="navbarToggle"
+                            aria-expanded="false"
+                            aria-label="Toggle navigation">
+                        <span class="navbar-toggler-icon"></span>
+                    </button>
+                    <div class="collapse navbar-collapse" id="navbarToggle">
+                        <div class="navbar-nav me-auto">
+                            <a class="nav-link {{ 'active' if path in ('/', '/posts') }}"
+                               {% if path in ('/', '/posts') %}aria-current="page"{% endif %}
+                               href="{{ url_for("home") }}">Home</a>
+                            {% if current_user %}
+                                <a class="nav-link {{ 'active' if path == '/feed' }}"
+                                   {% if path == '/feed' %}aria-current="page"{% endif %}
+                                   href="{{ url_for("feed_page") }}">Following</a>
+                                <a class="nav-link {{ 'active' if path == '/bookmarks' }}"
+                                   {% if path == '/bookmarks' %}aria-current="page"{% endif %}
+                                   href="{{ url_for("bookmarks_page") }}">Bookmarks</a>
+                            {% endif %}
+                        </div>
+                        <form class="nav-search my-2 my-lg-0 me-lg-3"
+                              role="search"
+                              action="{{ url_for('search_page') }}"
+                              method="get">
+                            <label for="navSearch" class="visually-hidden">Search posts</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">{{ icon("search", size=14) }}</span>
+                                <input id="navSearch"
+                                       class="form-control"
+                                       type="search"
+                                       name="q"
+                                       placeholder="Search posts…"
+                                       value="{{ query or '' }}"
+                                       maxlength="200">
+                            </div>
+                        </form>
+                        <!-- Navbar Right Side -->
+                        <div class="navbar-nav align-items-lg-center">
+                            {% if current_user %}
+                                <button class="btn btn-outline-light btn-sm mb-2 mb-lg-0 me-lg-2"
+                                        type="button"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#createPostModal">{{ icon("plus", size=16) }} New Post</button>
+                                <div class="nav-item dropdown">
+                                    <a class="nav-link dropdown-toggle d-flex align-items-center gap-2"
+                                       href="#"
+                                       role="button"
+                                       data-bs-toggle="dropdown"
+                                       aria-expanded="false"
+                                       id="userMenu">
+                                        <img class="rounded-circle nav-avatar"
+                                             src="{{ current_user.image_path }}"
+                                             alt=""
+                                             width="28"
+                                             height="28">
+                                        <span>{{ current_user.username }}</span>
+                                    </a>
+                                    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userMenu">
+                                        <li>
+                                            <a class="dropdown-item"
+                                               href="{{ url_for('user_posts', user_id=current_user.id) }}">{{ icon("user", size=16) }} Profile</a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('bookmarks_page') }}">{{ icon("bookmark", size=16) }} Bookmarks</a>
+                                        </li>
+                                        <li>
+                                            <hr class="dropdown-divider">
+                                        </li>
+                                        <li>
+                                            <button class="dropdown-item" type="button" data-action="logout">{{ icon("logout", size=16) }} Log out</button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            {% else %}
+                                <a class="btn btn-outline-light btn-sm mb-2 mb-lg-0 me-lg-2"
+                                   href="{{ url_for("login_page") }}">Login</a>
+                                <a class="btn btn-light btn-sm mb-2 mb-lg-0 me-lg-2"
+                                   href="{{ url_for("register_page") }}">Register</a>
+                            {% endif %}
+                            <div class="nav-item dropdown">
+                                <a class="nav-link dropdown-toggle"
+                                   href="#"
+                                   role="button"
+                                   id="bd-theme"
+                                   data-bs-toggle="dropdown"
+                                   aria-expanded="false"
+                                   aria-label="Change color theme">
+                                    <span id="bd-theme-text">🌗 Auto</span>
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="bd-theme">
+                                    <li>
+                                        <button class="dropdown-item" type="button" data-bs-theme-value="light">🌝 Light</button>
+                                    </li>
+                                    <li>
+                                        <button class="dropdown-item" type="button" data-bs-theme-value="dark">🌚 Dark</button>
+                                    </li>
+                                    <li>
+                                        <button class="dropdown-item" type="button" data-bs-theme-value="auto">🌗 Auto</button>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+        </header>
+        <main id="main-content" class="container" tabindex="-1">
+            {% if current_user and require_email_verification and not current_user.email_verified %}
+                <div class="alert alert-warning d-flex align-items-center gap-2" role="status">
+                    {{ icon("mail") }}
+                    <span>Please verify your email address to post and comment.
+                        <a href="{{ url_for('verify_email_page') }}" class="alert-link">Resend the link</a>
+                    </span>
+                </div>
+            {% endif %}
+            <div class="row">
+                <div class="col-lg-8">
+                    {% block content %}
+                    {% endblock content %}
+                </div>
+                <aside class="col-lg-4" aria-label="Sidebar">
+                    {% include "partials/sidebar.html" %}
+                </aside>
+            </div>
+        </main>
+        <footer class="site-footer mt-auto py-4 bg-body-tertiary border-top">
+            <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+                <p class="text-body-secondary mb-0">© {{ current_year }} {{ site_name }}</p>
+                <nav aria-label="Footer">
+                    <ul class="list-inline mb-0">
+                        <li class="list-inline-item">
+                            <a class="link-secondary" href="{{ url_for('home') }}">Home</a>
+                        </li>
+                        <li class="list-inline-item">
+                            <a class="link-secondary" href="{{ url_for('search_page') }}">Search</a>
+                        </li>
+                        <li class="list-inline-item">
+                            <a class="link-secondary" href="/docs">API Docs</a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </footer>
+        <!-- Toasts (see showToast in utils.js) -->
+        <div class="toast-container position-fixed bottom-0 end-0 p-3"
+             id="toastContainer"></div>
+        <!-- Screen-reader announcements for dynamic updates -->
+        <div class="visually-hidden" aria-live="polite" id="liveRegion"></div>
+        {% if current_user %}
+            <!-- Create Post Modal -->
+            <div class="modal fade"
+                 id="createPostModal"
+                 tabindex="-1"
+                 aria-labelledby="createPostModalLabel"
+                 aria-hidden="true">
+                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h2 class="modal-title h5" id="createPostModalLabel">New Post</h2>
+                            <button type="button"
+                                    class="btn-close"
+                                    data-bs-dismiss="modal"
+                                    aria-label="Close"></button>
+                        </div>
+                        <form id="createPostForm" class="post-form" novalidate>
+                            <div class="modal-body">{{ post_form_fields("create") }}</div>
+                            <div class="modal-footer">
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Publish</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+        <!-- Generic Confirm Modal (see confirmDialog in utils.js) -->
+        <div class="modal fade"
+             id="confirmModal"
+             tabindex="-1"
+             aria-labelledby="confirmModalLabel"
+             aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2 class="modal-title h5" id="confirmModalLabel">Are you sure?</h2>
+                        <button type="button"
+                                class="btn-close"
+                                data-bs-dismiss="modal"
+                                aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p id="confirmModalMessage" class="mb-0"></p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button"
+                                class="btn btn-outline-secondary"
+                                data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-danger" id="confirmModalButton">Confirm</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Data the frontend JS needs about the logged-in user -->
+        <script id="app-data" type="application/json">
+            {{ {
+                "currentUser": {
+                    "id": current_user.id,
+                    "username": current_user.username,
+                } if current_user else None,
+            } | json_script }}
+        </script>
+        <!-- Bootstrap Bundle with Popper -->
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
+                integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
+                crossorigin="anonymous"></script>
+        <!-- Dark Mode Toggle -->
+        <script>
+            const setTheme = (theme) => {
+                if (theme === 'auto') {
+                document.documentElement.setAttribute('data-bs-theme',
+                    window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+                } else {
+                document.documentElement.setAttribute('data-bs-theme', theme);
+                }
+                try { localStorage.setItem('theme', theme); } catch {}
+
+                // Update button text
+                const themeText = { light: '🌝 Light', dark: '🌚 Dark', auto: '🌗 Auto' };
+                document.getElementById('bd-theme-text').textContent = themeText[theme];
+            };
+
+            // Set theme on click
+            document.querySelectorAll('[data-bs-theme-value]').forEach(button => {
+                button.addEventListener('click', () => setTheme(button.getAttribute('data-bs-theme-value')));
+            });
+
+            // Initialize
+            let savedTheme = 'auto';
+            try { savedTheme = localStorage.getItem('theme') || 'auto'; } catch {}
+            setTheme(savedTheme);
+        </script>
+        <!-- Likes, bookmarks, follows, infinite scroll, the New Post form, etc. -->
+        <script type="module" src="/static/js/app.js"></script>
+        {% block scripts %}
+        {% endblock scripts %}
+    </body>
+</html>

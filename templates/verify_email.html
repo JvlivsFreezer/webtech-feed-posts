@@ -1,0 +1,72 @@
+{% extends "layout.html" %}
+{% from "_icons.html" import icon %}
+{% block content %}
+    <div class="content-section auth-card text-center py-5 px-4 mb-4"
+         aria-live="polite">
+        <div id="verifyPending">
+            <div class="spinner-border text-secondary mb-3" role="status">
+                <span class="visually-hidden">Verifying…</span>
+            </div>
+            <p class="mb-0">Verifying your email address…</p>
+        </div>
+        <div id="verifySuccess" class="d-none">
+            <div class="empty-state-icon text-success mb-3">{{ icon("check", size=40) }}</div>
+            <h1 class="h3">Email verified!</h1>
+            <p class="text-body-secondary">Thanks for confirming your email address.</p>
+            <a class="btn btn-primary" href="{{ url_for('home') }}">Continue to the blog</a>
+        </div>
+        <div id="verifyError" class="d-none">
+            <div class="empty-state-icon text-danger mb-3">{{ icon("alert", size=40) }}</div>
+            <h1 class="h3">Link invalid or expired</h1>
+            <p class="text-body-secondary" id="verifyErrorMessage">
+                This verification link can't be used. You can request a new one using the button below.
+            </p>
+            {% if current_user %}
+                <button type="button" id="resendVerification" class="btn btn-primary">Send verification email</button>
+            {% else %}
+                <a class="btn btn-primary" href="{{ url_for('login_page') }}?next=/verify-email">Log in to request a new link</a>
+            {% endif %}
+        </div>
+    </div>
+{% endblock content %}
+{% block scripts %}
+    <script type="module">
+      import { apiFetch, readError, showToast } from '/static/js/utils.js';
+      document.getElementById('resendVerification')?.addEventListener('click', async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        try {
+          const response = await apiFetch('/api/users/me/resend-verification', { method: 'POST' });
+          showToast(response.ok ? 'Verification email sent.' : await readError(response), response.ok ? 'success' : 'error');
+        } catch (error) {
+          if (error.name !== 'AuthRedirectError') showToast('Could not send verification email. Try again.', 'error');
+        } finally { button.disabled = false; }
+      });
+      const token = new URLSearchParams(window.location.search).get('token');
+      // Don't leave the token sitting in the address bar / history
+      window.history.replaceState(null, '', '/verify-email');
+
+      const show = (id) => {
+        for (const state of ['verifyPending', 'verifySuccess', 'verifyError']) {
+          document.getElementById(state).classList.toggle('d-none', state !== id);
+        }
+      };
+
+      async function verify() {
+        if (!token) return show('verifyError');
+        try {
+          const response = await fetch('/api/users/verify-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token }),
+          });
+          show(response.ok ? 'verifySuccess' : 'verifyError');
+        } catch {
+          document.getElementById('verifyErrorMessage').textContent =
+            'Network error. Please reload the page to try again.';
+          show('verifyError');
+        }
+      }
+      verify();
+    </script>
+{% endblock scripts %}

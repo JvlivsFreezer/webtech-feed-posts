@@ -1,0 +1,39 @@
+{% extends "layout.html" %}
+{% from "_icons.html" import icon %}
+{% set headings = {
+    401: "Please log in",
+    403: "Access denied",
+    404: "Page not found",
+    422: "Something's not quite right",
+    429: "Slow down a little",
+    500: "Something went wrong",
+    503: "Temporarily unavailable",
+} %}
+{% block content %}
+    <section class="content-section error-page text-center py-5 px-4 mb-4"
+             aria-labelledby="errorHeading">
+        <p class="error-code mb-2" aria-hidden="true">{{ status_code }}</p>
+        <h1 id="errorHeading" class="h3 mb-3">
+            {{ headings.get(status_code, "Oops… something went wrong") }}
+            <span class="visually-hidden">(error {{ status_code }})</span>
+        </h1>
+        <p class="text-body-secondary mb-4">
+            {% if message == "Not Found" %}
+                We couldn't find the page you're looking for. It may have been moved or deleted.
+            {% else %}
+                {{ message }}
+            {% endif %}
+        </p>
+        <div class="d-flex justify-content-center flex-wrap gap-2">
+            <a class="btn btn-primary" href="{{ url_for('home') }}">{{ icon("home", size=16) }} Back home</a>
+            <button type="button"
+                    class="btn btn-outline-secondary"
+                    onclick="history.length > 1 ? history.back() : location.assign('/')">
+                {{ icon("arrow-left", size=16) }} Go back
+            </button>
+            {% if status_code == 404 %}
+                <a class="btn btn-outline-secondary" href="{{ url_for('search_page') }}">{{ icon("search", size=16) }} Search posts</a>
+            {% endif %}
+        </div>
+    </section>
+{% endblock content %}

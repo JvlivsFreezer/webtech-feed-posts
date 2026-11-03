@@ -1,0 +1,89 @@
+{% extends "layout.html" %}
+{% block content %}
+    <div class="content-section auth-card py-4 px-4 mb-4">
+        <h1 class="h3 mb-4">Log in</h1>
+        <form id="loginForm" novalidate>
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input type="email"
+                       class="form-control"
+                       id="email"
+                       name="username"
+                       autocomplete="email"
+                       required
+                       autofocus>
+                <div class="invalid-feedback">Please enter a valid email address.</div>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password"
+                       class="form-control"
+                       id="password"
+                       name="password"
+                       autocomplete="current-password"
+                       required>
+                <div class="invalid-feedback">Please enter your password.</div>
+            </div>
+            <div id="loginError" class="alert alert-danger d-none" role="alert"></div>
+            <button type="submit" class="btn btn-primary w-100" id="loginBtn">Log in</button>
+        </form>
+        <div class="mt-3">
+            <p class="mb-2">
+                <a href="{{ url_for("forgot_password_page") }}">Forgot your password?</a>
+            </p>
+            <p class="mb-0">
+                Don't have an account? <a href="{{ url_for("register_page") }}">Register here</a>
+            </p>
+        </div>
+    </div>
+{% endblock content %}
+{% block scripts %}
+    <script type="module">
+      import { queueToast, readError } from '/static/js/utils.js';
+
+      const loginForm = document.getElementById('loginForm');
+      const loginError = document.getElementById('loginError');
+      const loginBtn = document.getElementById('loginBtn');
+
+      // Only follow same-site relative paths, never "//evil.com" style URLs
+      function nextUrl() {
+        const next = new URLSearchParams(window.location.search).get('next');
+        return next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+      }
+
+      loginForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        loginError.classList.add('d-none');
+
+        if (!loginForm.checkValidity()) {
+          loginForm.classList.add('was-validated');
+          return;
+        }
+
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Logging in…';
+
+        try {
+          // OAuth2PasswordRequestForm expects form data, not JSON.
+          // The server responds with HttpOnly auth cookies.
+          const response = await fetch('/api/users/token', {
+            method: 'POST',
+            body: new FormData(loginForm),
+          });
+
+          if (response.ok) {
+            queueToast('Welcome back!');
+            window.location.href = nextUrl();
+            return;
+          }
+          loginError.textContent = await readError(response);
+          loginError.classList.remove('d-none');
+        } catch (error) {
+          loginError.textContent = 'Network error. Please check your connection and try again.';
+          loginError.classList.remove('d-none');
+        }
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Log in';
+      });
+    </script>
+{% endblock scripts %}

@@ -1,0 +1,270 @@
+{% from "_icons.html" import icon %}
+{# Relative time ("3 hours ago") is filled in by JS; the exact date stays as a tooltip #}
+{% macro timestamp(dt, prefix="") -%}
+    <time datetime="{{ dt | isoformat }}"
+          data-relative
+          title="{{ dt.strftime('%B %d, %Y at %H:%M UTC') }}">{{ prefix }}{{ dt.strftime("%B %d, %Y") }}</time>
+{%- endmacro %}
+{% macro tag_list(tags, class="") %}
+    {% if tags %}
+        <ul class="tag-list list-unstyled d-flex flex-wrap gap-1 mb-0 {{ class }}"
+            aria-label="Tags">
+            {% for tag in tags %}
+                <li>
+                    <a class="tag-chip" href="{{ url_for('tag_page', name=tag.name) }}">#{{ tag.name }}</a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endmacro %}
+{% macro post_actions(post, current_user) %}
+    <div class="post-actions d-flex flex-wrap align-items-center gap-1">
+        <button type="button"
+                class="btn btn-sm btn-action btn-like {{ 'active' if post.liked_by_me }}"
+                data-action="like"
+                data-post-id="{{ post.id }}"
+                aria-pressed="{{ 'true' if post.liked_by_me else 'false' }}"
+                aria-label="Like “{{ post.title }}”"
+                title="Like">
+            {{ icon("heart") }}
+            <span class="like-count">{{ post.likes }}</span>
+        </button>
+        <a class="btn btn-sm btn-action"
+           href="{{ url_for('post_page', post_id=post.id) }}#comments"
+           aria-label="{{ post.comments_count }} comment{{ '' if post.comments_count == 1 else 's' }} on “{{ post.title }}”"
+           title="Comments">
+            {{ icon("comment") }}
+            <span>{{ post.comments_count }}</span>
+        </a>
+        <button type="button"
+                class="btn btn-sm btn-action btn-bookmark {{ 'active' if post.bookmarked_by_me }}"
+                data-action="bookmark"
+                data-post-id="{{ post.id }}"
+                aria-pressed="{{ 'true' if post.bookmarked_by_me else 'false' }}"
+                aria-label="Bookmark “{{ post.title }}”"
+                title="Bookmark">{{ icon("bookmark") }}</button>
+        <button type="button"
+                class="btn btn-sm btn-action"
+                data-action="share"
+                data-url="{{ url_for('post_page', post_id=post.id) }}"
+                aria-label="Copy link to “{{ post.title }}”"
+                title="Copy link">{{ icon("link") }}</button>
+    </div>
+{% endmacro %}
+{% macro post_card(post, current_user) %}
+    {% set post_url = url_for('post_page', post_id=post.id) %}
+    {% set author_url = url_for('user_posts', user_id=post.author.id) %}
+    <article class="content-section post-card py-3 px-3 px-md-4 mb-4"
+             aria-labelledby="post-title-{{ post.id }}">
+        <div class="d-flex align-items-start gap-3 gap-md-4">
+            <a href="{{ author_url }}"
+               class="flex-shrink-0"
+               tabindex="-1"
+               aria-hidden="true">
+                <img class="rounded-circle article-img"
+                     src="{{ post.author.image_path }}"
+                     alt=""
+                     width="64"
+                     height="64"
+                     loading="lazy">
+            </a>
+            <div class="flex-grow-1 min-w-0">
+                <div class="article-metadata mb-2 d-flex flex-wrap align-items-center column-gap-2">
+                    <a class="fw-semibold" href="{{ author_url }}">{{ post.author.username }}</a>
+                    <small class="text-body-secondary">{{ timestamp(post.date_posted) }}</small>
+                    <small class="text-body-secondary">· {{ post.reading_time }} min read</small>
+                </div>
+                <h2 class="h3 mb-2">
+                    <a id="post-title-{{ post.id }}" class="article-title" href="{{ post_url }}">{{ post.title }}</a>
+                </h2>
+                {% if post.image_path %}
+                    <a href="{{ post_url }}" tabindex="-1" aria-hidden="true">
+                        <img class="post-card-img mb-2"
+                             src="{{ post.image_path }}"
+                             alt=""
+                             loading="lazy">
+                    </a>
+                {% endif %}
+                <p class="article-excerpt mb-2">{{ post.excerpt }}</p>
+                {% if post.is_truncated %}
+                    <a class="read-more d-inline-block mb-2" href="{{ post_url }}">Read more<span class="visually-hidden"> of “{{ post.title }}”</span> →</a>
+                {% endif %}
+                {{ tag_list(post.tags, class="mb-2") }}
+                {{ post_actions(post, current_user) }}
+            </div>
+        </div>
+    </article>
+{% endmacro %}
+{% macro skeleton_cards(count=2) %}
+    {% for _ in range(count) %}
+        <div class="content-section skeleton-card py-3 px-4 mb-4" aria-hidden="true">
+            <div class="d-flex gap-4">
+                <div class="skeleton skeleton-avatar"></div>
+                <div class="flex-grow-1">
+                    <div class="skeleton skeleton-line w-25 mb-3"></div>
+                    <div class="skeleton skeleton-line skeleton-title w-75 mb-3"></div>
+                    <div class="skeleton skeleton-line mb-2"></div>
+                    <div class="skeleton skeleton-line w-50"></div>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+{% endmacro %}
+{% macro empty_state(message, icon_name="file", action_url=None, action_label=None, action_modal=None) %}
+    <div class="content-section empty-state text-center py-5 px-4 mb-4">
+        <div class="empty-state-icon mb-3">{{ icon(icon_name, size=40) }}</div>
+        <p class="text-body-secondary mb-3">{{ message }}</p>
+        {% if action_url %}
+            <a class="btn btn-primary" href="{{ action_url }}">{{ action_label }}</a>
+        {% elif action_modal %}
+            <button type="button"
+                    class="btn btn-primary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#{{ action_modal }}">{{ action_label }}</button>
+        {% endif %}
+    </div>
+{% endmacro %}
+{# Title / Markdown content with preview / tags / image - shared by the create and edit modals #}
+{% macro post_form_fields(prefix, post=None) %}
+    <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-baseline">
+            <label for="{{ prefix }}Title" class="form-label">Title</label>
+            <small class="text-body-secondary char-counter"
+                   data-counter-for="{{ prefix }}Title"
+                   aria-live="polite">0/100</small>
+        </div>
+        <input type="text"
+               class="form-control"
+               id="{{ prefix }}Title"
+               name="title"
+               maxlength="100"
+               value="{{ post.title if post else '' }}"
+               required
+               aria-describedby="{{ prefix }}TitleFeedback">
+        <div id="{{ prefix }}TitleFeedback" class="invalid-feedback">Please enter a title (up to 100 characters).</div>
+    </div>
+    <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-end mb-2">
+            <label for="{{ prefix }}Content" class="form-label mb-0">Content</label>
+            <ul class="nav nav-pills nav-pills-sm" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active py-1 px-2"
+                            type="button"
+                            role="tab"
+                            aria-selected="true"
+                            data-editor-tab="write">Write</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link py-1 px-2"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            data-editor-tab="preview">Preview</button>
+                </li>
+            </ul>
+        </div>
+        <textarea class="form-control font-monospace-sm"
+                  id="{{ prefix }}Content"
+                  name="content"
+                  rows="8"
+                  required
+                  aria-describedby="{{ prefix }}ContentHelp {{ prefix }}ContentFeedback">{{ post.content if post else '' }}</textarea>
+        <div class="markdown-body markdown-preview form-control d-none"
+             data-preview-for="{{ prefix }}Content"
+             aria-live="polite"></div>
+        <div id="{{ prefix }}ContentFeedback" class="invalid-feedback">Please write some content.</div>
+        <div class="d-flex justify-content-between flex-wrap gap-2 mt-1">
+            <small id="{{ prefix }}ContentHelp" class="text-body-secondary">
+                Markdown supported: <code>**bold**</code> <code>_italic_</code> <code>`code`</code> <code>[link](url)</code> <code>- lists</code>
+            </small>
+            <small class="text-body-secondary content-stats"
+                   data-stats-for="{{ prefix }}Content">0 words</small>
+        </div>
+    </div>
+    <div class="mb-3">
+        <label for="{{ prefix }}Tags" class="form-label">
+            Tags <span class="text-body-secondary fw-normal">(optional, up to 5)</span>
+        </label>
+        <input type="text"
+               class="form-control"
+               id="{{ prefix }}Tags"
+               name="tags"
+               placeholder="python, fastapi, tutorial"
+               value="{{ post.tags | map(attribute='name') | join(', ') if post else '' }}"
+               autocomplete="off"
+               aria-describedby="{{ prefix }}TagsHelp {{ prefix }}TagsFeedback">
+        <div id="{{ prefix }}TagsFeedback" class="invalid-feedback"></div>
+        <div id="{{ prefix }}TagsHelp" class="form-text">Separate with commas. Letters, numbers and dashes only.</div>
+        <div class="tag-preview d-flex flex-wrap gap-1 mt-1"
+             data-tags-preview-for="{{ prefix }}Tags"
+             aria-hidden="true"></div>
+    </div>
+    <div class="mb-1">
+        <label for="{{ prefix }}Image" class="form-label">
+            Image <span class="text-body-secondary fw-normal">(optional)</span>
+        </label>
+        <img class="image-upload-preview rounded mb-2 {{ '' if post and post.image_path else 'd-none' }}"
+             data-image-preview-for="{{ prefix }}Image"
+             src="{{ post.image_path if post and post.image_path else '' }}"
+             alt="Selected image preview">
+        <input type="file"
+               class="form-control"
+               id="{{ prefix }}Image"
+               name="image"
+               accept="image/*"
+               aria-describedby="{{ prefix }}ImageHelp">
+        <div id="{{ prefix }}ImageHelp" class="form-text">JPEG, PNG, GIF or WebP, up to 5MB.</div>
+        {% if post and post.image_path %}
+            <div class="form-check mt-1">
+                <input class="form-check-input"
+                       type="checkbox"
+                       id="{{ prefix }}RemoveImage"
+                       name="remove_image">
+                <label class="form-check-label" for="{{ prefix }}RemoveImage">Remove current image</label>
+            </div>
+        {% endif %}
+    </div>
+{% endmacro %}
+{% macro comment_item(comment, post, current_user) %}
+    {% set can_edit = current_user and current_user.id == comment.user_id %}
+    {% set can_delete = current_user and (can_edit or current_user.id == post.user_id) %}
+    <li class="comment d-flex gap-3 py-3"
+        id="comment-{{ comment.id }}"
+        data-comment-id="{{ comment.id }}">
+        <a href="{{ url_for('user_posts', user_id=comment.author.id) }}"
+           class="flex-shrink-0"
+           tabindex="-1"
+           aria-hidden="true">
+            <img class="rounded-circle comment-img"
+                 src="{{ comment.author.image_path }}"
+                 alt=""
+                 width="40"
+                 height="40"
+                 loading="lazy">
+        </a>
+        <div class="flex-grow-1 min-w-0">
+            <div class="d-flex flex-wrap align-items-baseline column-gap-2">
+                <a class="fw-semibold"
+                   href="{{ url_for('user_posts', user_id=comment.author.id) }}">{{ comment.author.username }}</a>
+                {% if comment.user_id == post.user_id %}<span class="badge text-bg-secondary">Author</span>{% endif %}
+                <small class="text-body-secondary">{{ timestamp(comment.created_at) }}</small>
+                {% if comment.updated_at %}<small class="text-body-secondary fst-italic">(edited)</small>{% endif %}
+            </div>
+            <p class="comment-content mb-1">{{ comment.content }}</p>
+            {% if can_edit or can_delete %}
+                <div class="comment-actions d-flex gap-2">
+                    {% if can_edit %}
+                        <button type="button"
+                                class="btn btn-link btn-sm p-0 text-body-secondary"
+                                data-action="edit-comment">Edit</button>
+                    {% endif %}
+                    {% if can_delete %}
+                        <button type="button"
+                                class="btn btn-link btn-sm p-0 text-danger-emphasis"
+                                data-action="delete-comment">Delete</button>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </li>
+{% endmacro %}

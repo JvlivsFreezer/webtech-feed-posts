@@ -1,0 +1,88 @@
+{% from "_icons.html" import icon %}
+{% if sidebar %}
+    <section class="content-section sidebar-section py-3 px-4 mb-4"
+             aria-labelledby="sidebarStatsHeading">
+        <h2 id="sidebarStatsHeading" class="sidebar-heading">{{ icon("chart", size=16) }} Community</h2>
+        <dl class="stat-row mb-0">
+            <div>
+                <dt>Posts</dt>
+                <dd>{{ sidebar.stats.posts }}</dd>
+            </div>
+            <div>
+                <dt>Members</dt>
+                <dd>{{ sidebar.stats.users }}</dd>
+            </div>
+            <div>
+                <dt>Comments</dt>
+                <dd>{{ sidebar.stats.comments }}</dd>
+            </div>
+        </dl>
+    </section>
+    <section class="content-section sidebar-section py-3 px-4 mb-4"
+             aria-labelledby="sidebarPopularHeading">
+        <h2 id="sidebarPopularHeading" class="sidebar-heading">{{ icon("trending", size=16) }} Popular this week</h2>
+        {% if sidebar.popular_this_week %}
+            <ol class="sidebar-list ranked mb-0">
+                {% for item in sidebar.popular_this_week %}
+                    <li>
+                        <a href="{{ url_for('post_page', post_id=item.id) }}">{{ item.title }}</a>
+                        <small class="text-body-secondary text-nowrap">· {{ item.likes }} {{ 'like' if item.likes == 1 else 'likes' }}</small>
+                    </li>
+                {% endfor %}
+            </ol>
+        {% else %}
+            <p class="text-body-secondary small mb-0">No likes yet this week. Find a post you enjoy and give it a ❤️</p>
+        {% endif %}
+    </section>
+    <section class="content-section sidebar-section py-3 px-4 mb-4"
+             aria-labelledby="sidebarRecentHeading">
+        <h2 id="sidebarRecentHeading" class="sidebar-heading">{{ icon("clock", size=16) }} Latest posts</h2>
+        {% if sidebar.recent %}
+            <ul class="sidebar-list mb-0">
+                {% for item in sidebar.recent %}
+                    <li>
+                        <a href="{{ url_for('post_page', post_id=item.id) }}">{{ item.title }}</a>
+                        <small class="d-block text-body-secondary">
+                            <time datetime="{{ item.date_posted | isoformat }}" data-relative>{{ item.date_posted.strftime("%B %d, %Y") }}</time>
+                        </small>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="text-body-secondary small mb-0">Nothing here yet.</p>
+        {% endif %}
+    </section>
+    {% if sidebar.top_authors %}
+        <section class="content-section sidebar-section py-3 px-4 mb-4"
+                 aria-labelledby="sidebarAuthorsHeading">
+            <h2 id="sidebarAuthorsHeading" class="sidebar-heading">{{ icon("users", size=16) }} Top authors</h2>
+            <ul class="sidebar-list mb-0">
+                {% for author in sidebar.top_authors %}
+                    <li class="d-flex align-items-center gap-2">
+                        <img class="rounded-circle"
+                             src="{{ author.image_path }}"
+                             alt=""
+                             width="28"
+                             height="28"
+                             loading="lazy">
+                        <a href="{{ url_for('user_posts', user_id=author.id) }}">{{ author.username }}</a>
+                        <small class="text-body-secondary ms-auto text-nowrap">{{ author.post_count }} {{ 'post' if author.post_count == 1 else 'posts' }}</small>
+                    </li>
+                {% endfor %}
+            </ul>
+        </section>
+    {% endif %}
+    {% if sidebar.tags %}
+        <section class="content-section sidebar-section py-3 px-4 mb-4"
+                 aria-labelledby="sidebarTagsHeading">
+            <h2 id="sidebarTagsHeading" class="sidebar-heading">{{ icon("hash", size=16) }} Popular tags</h2>
+            <ul class="tag-list list-unstyled d-flex flex-wrap gap-1 mb-0">
+                {% for tag in sidebar.tags %}
+                    <li>
+                        <a class="tag-chip" href="{{ url_for('tag_page', name=tag.name) }}">#{{ tag.name }} <span class="tag-count">{{ tag.post_count }}</span></a>
+                    </li>
+                {% endfor %}
+            </ul>
+        </section>
+    {% endif %}
+{% endif %}

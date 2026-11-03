@@ -1,0 +1,2 @@
+{% from "_macros.html" import comment_item with context %}
+{% for comment in comments %}{{ comment_item(comment, post, current_user) }}{% endfor %}

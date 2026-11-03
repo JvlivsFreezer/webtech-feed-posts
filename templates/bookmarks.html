@@ -1,0 +1,8 @@
+{% extends "post_list.html" %}
+{% from "_macros.html" import empty_state with context %}
+{% block list_header %}
+    <h1 class="h3 mb-3">Bookmarks</h1>
+{% endblock list_header %}
+{% block empty %}
+    {{ empty_state(empty_message, icon_name="bookmark", action_url=url_for('home'), action_label="Find something to read") }}
+{% endblock empty %}

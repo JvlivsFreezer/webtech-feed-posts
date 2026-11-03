@@ -1,0 +1,68 @@
+{% extends "post_list.html" %}
+{% from "_icons.html" import icon %}
+{% from "_macros.html" import empty_state with context %}
+{% block list_header %}
+    <section class="content-section profile-header py-4 px-4 mb-4"
+             aria-labelledby="profileName">
+        <div class="d-flex flex-column flex-sm-row align-items-center align-items-sm-start gap-4">
+            <img class="rounded-circle profile-img flex-shrink-0"
+                 src="{{ user.image_path }}"
+                 alt="{{ user.username }}'s profile picture"
+                 width="112"
+                 height="112">
+            <div class="flex-grow-1 text-center text-sm-start min-w-0">
+                <div class="d-flex flex-column flex-sm-row align-items-center gap-2 mb-1">
+                    <h1 id="profileName" class="h2 mb-0 text-break">{{ user.username }}</h1>
+                    <div class="ms-sm-auto">
+                        {% if current_user and not is_me %}
+                            <button type="button"
+                                    class="btn btn-sm btn-follow {{ 'btn-outline-primary following' if stats.followed_by_me else 'btn-primary' }}"
+                                    data-action="follow"
+                                    data-user-id="{{ user.id }}"
+                                    aria-pressed="{{ 'true' if stats.followed_by_me else 'false' }}">
+                                {{ 'Following' if stats.followed_by_me else 'Follow' }}
+                            </button>
+                        {% elif not current_user %}
+                            <a class="btn btn-sm btn-primary"
+                               href="{{ url_for('login_page') }}?next={{ request.url.path | urlencode }}">Follow</a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if user.bio %}
+                    <p class="profile-bio mb-2">{{ user.bio }}</p>
+                {% endif %}
+                {% if user.created_at %}
+                    <p class="text-body-secondary small mb-3">
+                        {{ icon("calendar", size=14) }} Joined {{ user.created_at.strftime("%B %Y") }}
+                    </p>
+                {% endif %}
+                <dl class="stat-row profile-stats mb-0">
+                    <div>
+                        <dt>Posts</dt>
+                        <dd>{{ stats.post_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>Likes</dt>
+                        <dd>{{ stats.total_likes }}</dd>
+                    </div>
+                    <div>
+                        <dt>Followers</dt>
+                        <dd data-followers-count>{{ stats.followers_count }}</dd>
+                    </div>
+                    <div>
+                        <dt>Following</dt>
+                        <dd>{{ stats.following_count }}</dd>
+                    </div>
+                </dl>
+            </div>
+        </div>
+    </section>
+    <h2 class="h4 mb-3">Posts</h2>
+{% endblock list_header %}
+{% block empty %}
+    {% if is_me %}
+        {{ empty_state(empty_message, action_modal="createPostModal", action_label="Write your first post") }}
+    {% else %}
+        {{ empty_state(empty_message) }}
+    {% endif %}
+{% endblock empty %}

@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% from "_macros.html" import post_card, skeleton_cards, empty_state with context %}
+{# Base for every page that lists posts. Child pages fill in list_header and empty. #}
+{% block content %}
+    {% block list_header %}
+    {% endblock list_header %}
+    {% if sort_options and posts %}
+        <form class="d-flex justify-content-end align-items-center gap-2 mb-3"
+              method="get">
+            {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+            <label for="sortSelect" class="text-body-secondary small">Sort by</label>
+            <select id="sortSelect"
+                    name="sort"
+                    class="form-select form-select-sm w-auto"
+                    data-autosubmit>
+                {% for value, label in sort_options %}
+                    <option value="{{ value }}" {{ 'selected' if value == sort }}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <noscript>
+                <button type="submit" class="btn btn-sm btn-outline-primary">Apply</button>
+            </noscript>
+        </form>
+    {% endif %}
+    {% if posts %}
+        <div id="postsContainer"
+             data-partial-query="{{ partial_query }}"
+             data-next-skip="{{ next_skip }}"
+             data-has-more="{{ 'true' if has_more else 'false' }}">
+            {% for post in posts %}{{ post_card(post, current_user) }}{% endfor %}
+        </div>
+        <div id="postSkeletons" class="d-none">{{ skeleton_cards(2) }}</div>
+        <div id="scrollSentinel" aria-hidden="true"></div>
+        {% if has_more %}
+            <div class="text-center mb-4">
+                <button type="button" class="btn btn-outline-primary" id="loadMoreBtn">Load more posts</button>
+            </div>
+        {% endif %}
+        <p id="endOfList"
+           class="text-center text-body-secondary small mb-4 {{ 'd-none' if has_more }}">You're all caught up ✨</p>
+    {% else %}
+        {% block empty %}
+            {{ empty_state(empty_message) }}
+        {% endblock empty %}
+    {% endif %}
+{% endblock content %}

@@ -1,0 +1,144 @@
+{% extends "layout.html" %}
+{% block content %}
+    <div class="content-section auth-card py-4 px-4 mb-4">
+        <h1 class="h3 mb-4">Create an account</h1>
+        <form id="registerForm" novalidate>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-baseline">
+                    <label for="username" class="form-label">Username</label>
+                    <small class="text-body-secondary char-counter" data-counter-for="username">0/50</small>
+                </div>
+                <input type="text"
+                       class="form-control"
+                       id="username"
+                       name="username"
+                       autocomplete="username"
+                       required
+                       minlength="1"
+                       maxlength="50"
+                       autofocus>
+                <div class="invalid-feedback">Please choose a username.</div>
+            </div>
+            <div class="mb-3">
+                <label for="email" class="form-label">Email</label>
+                <input type="email"
+                       class="form-control"
+                       id="email"
+                       name="email"
+                       autocomplete="email"
+                       required>
+                <div class="invalid-feedback">Please enter a valid email address.</div>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">Password</label>
+                <input type="password"
+                       class="form-control"
+                       id="password"
+                       name="password"
+                       autocomplete="new-password"
+                       required
+                       minlength="8"
+                       aria-describedby="passwordHelp">
+                <div id="passwordHelp" class="form-text">Must be at least 8 characters.</div>
+                <div class="invalid-feedback">Password must be at least 8 characters.</div>
+            </div>
+            <div class="mb-3">
+                <label for="confirmPassword" class="form-label">Confirm Password</label>
+                <input type="password"
+                       class="form-control"
+                       id="confirmPassword"
+                       name="confirmPassword"
+                       autocomplete="new-password"
+                       required
+                       minlength="8">
+                <div class="invalid-feedback">Passwords do not match.</div>
+            </div>
+            <div id="registerError" class="alert alert-danger d-none" role="alert"></div>
+            <button type="submit" class="btn btn-primary w-100" id="registerBtn">Create account</button>
+        </form>
+        <p class="mt-3 mb-0">
+            Already have an account? <a href="{{ url_for("login_page") }}">Log in here</a>
+        </p>
+    </div>
+{% endblock content %}
+{% block scripts %}
+    <script type="module">
+      import { initCharCounters, queueToast, readError } from '/static/js/utils.js';
+
+      const registerForm = document.getElementById('registerForm');
+      const passwordInput = document.getElementById('password');
+      const confirmPasswordInput = document.getElementById('confirmPassword');
+      const registerError = document.getElementById('registerError');
+      const registerBtn = document.getElementById('registerBtn');
+
+      initCharCounters(registerForm);
+
+      // Check passwords match on input
+      const checkMatch = () => {
+        confirmPasswordInput.setCustomValidity(
+          passwordInput.value === confirmPasswordInput.value ? '' : 'Passwords do not match',
+        );
+      };
+      passwordInput.addEventListener('input', checkMatch);
+      confirmPasswordInput.addEventListener('input', checkMatch);
+
+      function showError(message) {
+        registerError.textContent = message;
+        registerError.classList.remove('d-none');
+      }
+
+      registerForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        registerError.classList.add('d-none');
+        checkMatch();
+
+        if (!registerForm.checkValidity()) {
+          registerForm.classList.add('was-validated');
+          registerForm.querySelector(':invalid')?.focus();
+          return;
+        }
+
+        const formData = new FormData(registerForm);
+        const userData = {
+          username: formData.get('username'),
+          email: formData.get('email'),
+          password: formData.get('password'),
+        };
+
+        registerBtn.disabled = true;
+        registerBtn.textContent = 'Creating account…';
+
+        try {
+          const response = await fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(userData),
+          });
+
+          if (!response.ok) {
+            showError(await readError(response));
+            return;
+          }
+
+          // Log straight in so new users don't have to type their details twice
+          const login = new FormData();
+          login.append('username', userData.email);
+          login.append('password', userData.password);
+          const loginResponse = await fetch('/api/users/token', { method: 'POST', body: login });
+
+          if (loginResponse.ok) {
+            queueToast('Welcome! Check your inbox for a link to verify your email.');
+            window.location.href = '/';
+          } else {
+            queueToast('Account created! Please log in.');
+            window.location.href = '/login';
+          }
+        } catch (error) {
+          showError('Network error. Please check your connection and try again.');
+        } finally {
+          registerBtn.disabled = false;
+          registerBtn.textContent = 'Create account';
+        }
+      });
+    </script>
+{% endblock scripts %}
