@@ -8,13 +8,16 @@ from fastapi import (
     HTTPException,
     Query,
     Response,
+    UploadFile,
     status,
 )
 from fastapi.security import OAuth2PasswordRequestForm
+from PIL import UnidentifiedImageError
 from sqlalchemy import delete as sql_delete
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 import models
 from auth import (
@@ -30,10 +33,12 @@ from auth import (
 from config import settings
 from database import get_db
 from email_utils import send_password_reset_email, send_verification_email
-from models import follows
+from image_utils import delete_post_image, delete_profile_image, process_profile_image
+from models import follows, post_likes
 from rate_limit import login_limiter, password_email_limiter, register_limiter
 from routers.posts import Limit, Skip, paginated_posts
 from schemas import (
+    ChangePasswordRequest,
     FollowResponse,
     ForgotPasswordRequest,
     PaginatedPostsResponse,
@@ -43,6 +48,7 @@ from schemas import (
     UserPrivate,
     UserProfile,
     UserPublic,
+    UserUpdate,
     VerifyEmailRequest,
 )
 from services import (
@@ -358,6 +364,34 @@ async def reset_password(
     }
 
 
+@router.patch("/me/password", status_code=status.HTTP_200_OK)
+async def change_password(
+    password_data: ChangePasswordRequest,
+    response: Response,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if not verify_password(password_data.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    current_user.password_hash = hash_password(password_data.new_password)
+    # Sign out other devices, then re-issue cookies so this one stays logged in
+    current_user.token_version += 1
+
+    await db.execute(
+        sql_delete(models.PasswordResetToken).where(
+            models.PasswordResetToken.user_id == current_user.id,
+        ),
+    )
+
+    await db.commit()
+    set_auth_cookies(response, current_user)
+    return {"message": "Password changed successfully"}
+
+
 @router.get("/{user_id}", response_model=UserProfile)
 async def get_user(
     user_id: int,
@@ -469,3 +503,185 @@ async def unfollow_user(
         following=False,
         followers_count=await followers_count(db, user_id),
     )
+
+
+@router.patch("/{user_id}", response_model=UserPrivate)
+async def update_user(
+    user_id: int,
+    user_update: UserUpdate,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this user",
+        )
+
+    user = current_user
+    if (
+        user_update.username is not None
+        and user_update.username.lower() != user.username.lower()
+    ):
+        result = await db.execute(
+            select(models.User).where(
+                func.lower(models.User.username) == user_update.username.lower(),
+            ),
+        )
+        existing_user = result.scalars().first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already exists",
+            )
+
+    email_changed = (
+        user_update.email is not None
+        and user_update.email.lower() != user.email.lower()
+    )
+    if email_changed:
+        result = await db.execute(
+            select(models.User).where(
+                func.lower(models.User.email) == user_update.email.lower(),
+            ),
+        )
+        existing_email = result.scalars().first()
+        if existing_email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
+
+    if user_update.username is not None:
+        user.username = user_update.username
+    if user_update.email is not None:
+        user.email = user_update.email.lower()
+    if "bio" in user_update.model_fields_set:
+        user.bio = (user_update.bio or "").strip() or None
+    if email_changed:
+        # The new address has to be confirmed again
+        user.email_verified = False
+
+    await db.commit()
+    await db.refresh(user)
+
+    if email_changed:
+        await start_email_verification(db, user, background_tasks)
+    return user
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: int,
+    response: Response,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this user",
+        )
+
+    user = current_user
+    old_filename = user.image_file
+    post_images = list(
+        await db.scalars(
+            select(models.Post.image_file).where(
+                models.Post.user_id == user.id,
+                models.Post.image_file.is_not(None),
+            ),
+        ),
+    )
+
+    # Their like rows are removed by ON DELETE CASCADE, so fix the cached
+    # counts on the posts they liked first
+    await db.execute(
+        update(models.Post)
+        .where(
+            models.Post.id.in_(
+                select(post_likes.c.post_id).where(post_likes.c.user_id == user.id),
+            ),
+        )
+        .values(likes=models.Post.likes - 1),
+    )
+
+    await db.delete(user)
+    await db.commit()
+    clear_auth_cookies(response)
+
+    if old_filename:
+        delete_profile_image(old_filename)
+    for filename in post_images:
+        delete_post_image(filename)
+
+
+@router.patch("/{user_id}/picture", response_model=UserPrivate)
+async def upload_profile_picture(
+    user_id: int,
+    file: UploadFile,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this user's picture",
+        )
+
+    content = await file.read()
+
+    if len(content) > settings.max_upload_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum size is {settings.max_upload_size_bytes // (1024 * 1024)}MB",
+        )
+
+    try:
+        new_filename = await run_in_threadpool(process_profile_image, content)
+    except UnidentifiedImageError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid image file. Please upload a valid image (JPEG, PNG, GIF, WebP).",
+        ) from err
+
+    old_filename = current_user.image_file
+
+    current_user.image_file = new_filename
+    await db.commit()
+    await db.refresh(current_user)
+
+    if old_filename:
+        delete_profile_image(old_filename)
+
+    return current_user
+
+
+@router.delete("/{user_id}/picture", response_model=UserPrivate)
+async def delete_user_picture(
+    user_id: int,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this user's picture",
+        )
+
+    old_filename = current_user.image_file
+
+    if old_filename is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No profile picture to delete",
+        )
+
+    current_user.image_file = None
+    await db.commit()
+    await db.refresh(current_user)
+
+    delete_profile_image(old_filename)
+
+    return current_user

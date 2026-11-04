@@ -14,7 +14,10 @@
                 <div class="d-flex flex-column flex-sm-row align-items-center gap-2 mb-1">
                     <h1 id="profileName" class="h2 mb-0 text-break">{{ user.username }}</h1>
                     <div class="ms-sm-auto">
-                        {% if current_user and not is_me %}
+                        {% if is_me %}
+                            <a class="btn btn-sm btn-outline-secondary"
+                               href="{{ url_for('account_page') }}">{{ icon("edit", size=14) }} Edit profile</a>
+                        {% elif current_user %}
                             <button type="button"
                                     class="btn btn-sm btn-follow {{ 'btn-outline-primary following' if stats.followed_by_me else 'btn-primary' }}"
                                     data-action="follow"
@@ -22,7 +25,7 @@
                                     aria-pressed="{{ 'true' if stats.followed_by_me else 'false' }}">
                                 {{ 'Following' if stats.followed_by_me else 'Follow' }}
                             </button>
-                        {% elif not current_user %}
+                        {% else %}
                             <a class="btn btn-sm btn-primary"
                                href="{{ url_for('login_page') }}?next={{ request.url.path | urlencode }}">Follow</a>
                         {% endif %}
@@ -30,6 +33,10 @@
                 </div>
                 {% if user.bio %}
                     <p class="profile-bio mb-2">{{ user.bio }}</p>
+                {% elif is_me %}
+                    <p class="text-body-secondary fst-italic mb-2">
+                        You haven't written a bio yet. <a href="{{ url_for('account_page') }}">Add one</a>
+                    </p>
                 {% endif %}
                 {% if user.created_at %}
                     <p class="text-body-secondary small mb-3">

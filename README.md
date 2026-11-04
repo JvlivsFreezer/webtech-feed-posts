@@ -1,86 +1,115 @@
-# Webtech — Feed and Posts
+# FastAPI Blog
 
-A runnable extraction of Abhinav Yadav's assigned feature areas from
-[Ojas-Thakurela/webtech-project](https://github.com/Ojas-Thakurela/webtech-project).
-Built with FastAPI, Jinja2, PostgreSQL and vanilla JavaScript.
+A community blog built with FastAPI, async SQLAlchemy, PostgreSQL and Alembic.
+Pages are rendered on the server with Jinja2 and Bootstrap 5, and enhanced with a
+little vanilla JavaScript.
 
-## Included features
+## Features
 
-| Area | Pages and behavior | Main files |
-| --- | --- | --- |
-| Home feed | Latest posts, Following feed, sorting and infinite scroll | `routers/pages.py`, `services.py`, `templates/home.html`, `templates/post_list.html` |
-| Discovery | Full-text search, tag pages, popular tags | `templates/search.html`, `templates/tag.html`, `routers/tags.py` |
-| Bookmarks | Save/unsave posts and a personal saved-post list | `templates/bookmarks.html`, `routers/posts.py`, `routers/users.py` |
-| Post editor | New/Edit Post modals, Markdown preview, tags and image uploads | `templates/layout.html`, `templates/_macros.html`, `templates/post.html`, `static/js/app.js` |
-| Post detail | Full post, likes, bookmarks, comments with edit/delete and pagination | `templates/post.html`, `templates/partials/comments.html`, `routers/posts.py`, `routers/comments.py` |
+**Writing and reading**
+- Posts written in Markdown (sanitized), with a live server-rendered preview
+- Up to 5 tags per post, tag pages, and a popular-tags list
+- An optional image per post (resized automatically)
+- Excerpts with "Read more", reading time, and relative timestamps ("3 hours ago")
+- Full-text search (Postgres `tsvector` + GIN index) with title substring matching
+- Sort by newest, oldest, most liked, or best match
+- Infinite scroll with skeleton loaders (the "Load more" button stays as a fallback)
 
-New Post opens from the navigation bar after login. Edit Post opens on the
-owner's post detail page. These preserve the source project's modal-based editor.
+**Community**
+- Likes (one per user), bookmarks, and comments (edit/delete)
+- Follow authors, plus a "Following" feed
+- Profiles with avatar, bio, join date, and post/like/follower counts
+- A sidebar with community stats, popular posts this week, latest posts, top
+  authors, and tags
 
-## Shared dependencies and scope
+**Accounts and security**
+- HttpOnly cookie auth with short-lived access tokens and silently refreshed
+  refresh tokens; Bearer tokens still work for API clients and `/docs`
+- CSRF protection: SameSite=Lax cookies plus a required `X-Requested-With`
+  header on cookie-authenticated writes
+- "Log out of all devices"; changing or resetting your password revokes other sessions
+- Email verification (optionally required before posting/commenting) and password reset
+- Rate limiting on login, registration and password/verification emails
 
-Authentication (register/login/logout, cookies, verification and password recovery),
-read-only author pages and follow/unfollow are included as supporting code:
-Following, bookmarks, editing, likes and comments need authenticated users.
-The database models, migrations, shared layout, styles, image processing and
-rendering utilities are also retained. These shared components are inherited
-project infrastructure, not a claim of sole authorship.
+**UI**
+- Light/dark/auto theme, toasts instead of blocking modals, confirm dialogs
+- Character counters and inline validation on forms
+- Friendly empty states and error pages
+- Accessibility: skip link, visible focus rings, `aria-live` announcements,
+  WCAG AA contrast, and reduced-motion support
 
-Account settings, profile editing/uploads, account deletion and the account
-password-change endpoint are excluded. Legacy finished-example files, seed scripts,
-seed images and uploaded media are excluded as well. The shared schema and migration
-chain are kept intact to avoid breaking relationships between posts and users.
+## Setup
 
-## Run locally
+Requires Python 3.12+, [uv](https://docs.astral.sh/uv/) and PostgreSQL.
 
-Requires Python 3.12+, uv and PostgreSQL. Start a local database, for example:
+1. Create a `.env` file:
 
-```bash
-docker run --name webtech-feed-posts-db \
-  -e POSTGRES_USER=bloguser -e POSTGRES_PASSWORD=blogpass \
-  -e POSTGRES_DB=blog -p 127.0.0.1:5432:5432 -d postgres:18
-cp .env.example .env
-```
+   ```env
+   DATABASE_URL=postgresql+psycopg://bloguser:blogpass@localhost/blog
+   SECRET_KEY=<run: python -c "import secrets; print(secrets.token_hex(32))">
+   # Print emails (verification / password reset links) to the terminal
+   # instead of sending them:
+   MAIL_BACKEND=console
+   ```
 
-Replace `SECRET_KEY` in `.env` with the output of:
+   Other settings (see `config.py`): `SITE_NAME`, `REQUIRE_EMAIL_VERIFICATION`,
+   `RATE_LIMIT_ENABLED`, `COOKIE_SECURE` (set `true` in production behind HTTPS),
+   `MAIL_SERVER` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_FROM`, and
+   `FRONTEND_URL`.
 
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
-```
+2. Install dependencies and create the database tables:
 
-Then install, migrate and run:
+   ```bash
+   uv sync
+   uv run alembic upgrade head
+   ```
 
-```bash
-uv sync --locked
-uv run alembic upgrade head
-uv run uvicorn main:app --reload
-```
+3. Optionally load sample users, posts, tags, likes, comments and follows.
+   Warning: this deletes existing data and profile pictures.
 
-Open <http://localhost:8000>, register two accounts, publish a post and follow
-its author to try the Following feed. Verification/recovery emails print to the
-terminal with `MAIL_BACKEND=console`. Interactive API docs are at `/docs`.
+   ```bash
+   uv run python populate_db.py
+   ```
 
-The Docker credentials above are for local development. Use your own database
-credentials and set `COOKIE_SECURE=true` when serving over HTTPS.
+4. Run the app and open http://localhost:8000. API docs are at `/docs`.
+
+   ```bash
+   uv run uvicorn main:app --reload
+   ```
+
+   > **Windows:** psycopg's async driver can't run on Windows' default
+   > `ProactorEventLoop`. `--reload` mode makes uvicorn use a selector event loop, so
+   > use the command above.
+
+## Troubleshooting
+
+**"Can't reach the database"** (on every page, or when logging in/registering):
+PostgreSQL isn't running. If you use Docker, start Docker Desktop and then the
+container (e.g. `docker start <container-name>`), and reload the page.
 
 ## Tests
+
+The tests run against a real PostgreSQL database, because they use full-text search,
+`ON CONFLICT` and generated columns. By default the test database is your
+`DATABASE_URL` with `_test` added to the database name, and it's created
+automatically. Set `TEST_DATABASE_URL` to use a different one. Every run migrates the
+database down to empty and back up, so the migrations get tested too.
 
 ```bash
 uv run pytest
 ```
 
-Tests use a separate PostgreSQL database, defaulting to `DATABASE_URL` with
-`_test` appended to the database name. The database user needs permission to
-create it. `TEST_DATABASE_URL` can override the destination. Tests migrate that
-database down/up and clear its tables; use a dedicated test database.
+## Project layout
 
-The suite covers post CRUD/ownership, search and tags, likes, bookmarks, comments,
-following, page rendering, Markdown safety and authentication dependencies.
-
-## Source and history
-
-Extracted from source commit `24738217fb793eb07ee0b61a5a6028423a760c67`.
-This repository starts a fresh history with descriptive feature messages, so
-legacy tutorial-labelled commits are not imported. The source repository and
-its history remain unchanged. Extraction commits describe packaging and adaptation
-of existing project code, not original authorship of all included files.
+| Path | What's there |
+| --- | --- |
+| `main.py` | App setup, token-refresh and security-header middleware, error pages |
+| `routers/` | `posts`, `comments`, `users`, `tags` (JSON API) and `pages` (HTML) |
+| `services.py` | Query helpers shared by the API and pages (listing, search, sidebar…) |
+| `models.py` / `schemas.py` | SQLAlchemy models / Pydantic schemas |
+| `auth.py` | Password hashing, JWT cookies, auth dependencies |
+| `rendering.py` | Markdown rendering, sanitizing, excerpts, reading time |
+| `rate_limit.py` | Small in-memory rate limiter (use Redis if you run several workers) |
+| `alembic/versions/` | Database migrations |
+| `templates/` | Jinja2 templates (`_macros.html` holds the shared post card, forms…) |
+| `static/js/app.js` | Likes, bookmarks, follows, infinite scroll, post form |

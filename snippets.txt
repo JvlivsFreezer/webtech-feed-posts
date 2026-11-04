@@ -1,0 +1,10 @@
+## Database URL
+# PostgreSQL: postgresql+psycopg://user:password@localhost/blog
+DATABASE_URL=postgresql+psycopg://bloguser:blogpass@localhost/blog
+
+
+## Likes Field
+likes: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+##

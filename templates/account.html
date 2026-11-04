@@ -1,0 +1,406 @@
+{% extends "layout.html" %}
+{% from "_icons.html" import icon %}
+{% block content %}
+    <div class="content-section py-4 px-4 mb-4">
+        <h1 class="h3 mb-4">Account Settings</h1>
+        <!-- Profile Info Section -->
+        <div class="d-flex align-items-center mb-4">
+            <img id="profileImage"
+                 class="rounded-circle me-3 object-fit-cover"
+                 src="{{ current_user.image_path }}"
+                 alt="Your profile picture"
+                 width="100"
+                 height="100">
+            <div class="min-w-0">
+                <h2 id="displayUsername" class="h5 mb-0 text-break">{{ current_user.username }}</h2>
+                <p id="displayEmail" class="text-body-secondary mb-1 text-break">{{ current_user.email }}</p>
+                <a href="{{ url_for('user_posts', user_id=current_user.id) }}">View public profile →</a>
+            </div>
+        </div>
+        <!-- Email Verification -->
+        <section class="mb-4" aria-labelledby="verificationHeading">
+            <h2 id="verificationHeading" class="h5">Email</h2>
+            {% if current_user.email_verified %}
+                <p class="mb-0">
+                    <span class="badge text-bg-success">{{ icon("check", size=12) }} Verified</span>
+                    Your email address is confirmed.
+                </p>
+            {% else %}
+                <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 mb-0"
+                     role="status">
+                    <span class="flex-grow-1">
+                        {{ icon("mail") }} Your email isn't verified yet.
+                        {% if require_verification %}You need to verify it before you can post or comment.{% endif %}
+                    </span>
+                    <button type="button" class="btn btn-sm btn-warning" id="resendVerificationBtn">Resend verification email</button>
+                </div>
+            {% endif %}
+        </section>
+        <hr>
+        <!-- Update Profile Form -->
+        <section class="mb-4" aria-labelledby="profileHeading">
+            <h2 id="profileHeading" class="h5">Update Profile</h2>
+            <form id="updateProfileForm" novalidate>
+                <div class="mb-3">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text"
+                           class="form-control"
+                           id="username"
+                           name="username"
+                           value="{{ current_user.username }}"
+                           autocomplete="username"
+                           required
+                           minlength="1"
+                           maxlength="50">
+                    <div class="invalid-feedback">Please enter a username.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email"
+                           class="form-control"
+                           id="email"
+                           name="email"
+                           value="{{ current_user.email }}"
+                           autocomplete="email"
+                           aria-describedby="emailHelp"
+                           required>
+                    <div id="emailHelp" class="form-text">Changing your email means verifying the new address.</div>
+                    <div class="invalid-feedback">Please enter a valid email address.</div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-baseline">
+                        <label for="bio" class="form-label">Bio</label>
+                        <small class="text-body-secondary char-counter" data-counter-for="bio">0/300</small>
+                    </div>
+                    <textarea class="form-control"
+                              id="bio"
+                              name="bio"
+                              rows="3"
+                              maxlength="300"
+                              placeholder="Tell readers a little about yourself">{{ current_user.bio or '' }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Update Profile</button>
+            </form>
+        </section>
+        <hr>
+        <!-- Profile Picture Section -->
+        <section class="mb-4" aria-labelledby="pictureHeading">
+            <h2 id="pictureHeading" class="h5">Profile Picture</h2>
+            <!-- Preview container -->
+            <div class="mb-3">
+                <img id="imagePreview"
+                     class="rounded-circle d-none object-fit-cover"
+                     alt="Image preview"
+                     width="150"
+                     height="150">
+            </div>
+            <!-- File input and upload button -->
+            <label for="pictureInput" class="visually-hidden">Choose a profile picture</label>
+            <div class="d-flex flex-wrap gap-2 align-items-start">
+                <input type="file"
+                       class="form-control file-input-sm"
+                       id="pictureInput"
+                       accept="image/*"
+                       aria-describedby="pictureHelp">
+                <button type="button" class="btn btn-primary" id="uploadPictureBtn" disabled>Upload</button>
+                {% if current_user.image_file %}
+                    <button type="button" class="btn btn-outline-danger" id="removePictureBtn">Remove</button>
+                {% endif %}
+            </div>
+            <small id="pictureHelp" class="text-body-secondary">Maximum file size: 5MB. Supported formats: JPEG, PNG, GIF, WebP.</small>
+        </section>
+        <hr>
+        <!-- Change Password Section -->
+        <section class="mb-4" aria-labelledby="passwordHeading">
+            <h2 id="passwordHeading" class="h5">Change Password</h2>
+            <form id="changePasswordForm" novalidate>
+                <div class="mb-3">
+                    <label for="currentPassword" class="form-label">Current Password</label>
+                    <input type="password"
+                           class="form-control"
+                           id="currentPassword"
+                           name="current_password"
+                           autocomplete="current-password"
+                           required>
+                    <div class="invalid-feedback">Please enter your current password.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="newPassword" class="form-label">New Password</label>
+                    <input type="password"
+                           class="form-control"
+                           id="newPassword"
+                           name="new_password"
+                           autocomplete="new-password"
+                           required
+                           minlength="8"
+                           aria-describedby="newPasswordHelp">
+                    <div id="newPasswordHelp" class="form-text">
+                        Password must be at least 8 characters. Changing it signs you out on other devices.
+                    </div>
+                    <div class="invalid-feedback">Password must be at least 8 characters.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="confirmNewPassword" class="form-label">Confirm New Password</label>
+                    <input type="password"
+                           class="form-control"
+                           id="confirmNewPassword"
+                           name="confirm_new_password"
+                           autocomplete="new-password"
+                           required
+                           minlength="8">
+                    <div class="invalid-feedback">Passwords do not match.</div>
+                </div>
+                <button type="submit" class="btn btn-primary" id="changePasswordBtn">Change Password</button>
+            </form>
+        </section>
+        <hr>
+        <!-- Sessions -->
+        <section class="mb-4" aria-labelledby="sessionsHeading">
+            <h2 id="sessionsHeading" class="h5">Sessions</h2>
+            <p class="text-body-secondary">Lost a device or logged in somewhere public? Sign out everywhere at once.</p>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-action="logout">Log out</button>
+                <button type="button" class="btn btn-outline-secondary" id="logoutAllBtn">Log out of all devices</button>
+            </div>
+        </section>
+        <hr>
+        <!-- Danger Zone -->
+        <section class="mb-2" aria-labelledby="dangerHeading">
+            <h2 id="dangerHeading" class="h5 text-danger-emphasis">Danger Zone</h2>
+            <p class="text-body-secondary">
+                Once you delete your account, there is no going back. All your posts and comments will also be deleted.
+            </p>
+            <button type="button" class="btn btn-outline-danger" id="deleteAccountBtn">Delete Account</button>
+        </section>
+    </div>
+{% endblock content %}
+{% block scripts %}
+    <script type="module">
+  import {
+    apiFetch, confirmDialog, initCharCounters, queueToast, readError, showToast,
+  } from '/static/js/utils.js';
+
+  const currentUserId = {{ current_user.id }};
+
+  function networkError(error) {
+    if (error.name !== 'AuthRedirectError') {
+      showToast('Network error. Please check your connection and try again.', 'error');
+    }
+  }
+
+  initCharCounters(document.getElementById('updateProfileForm'));
+
+  // Resend verification email
+  document.getElementById('resendVerificationBtn')?.addEventListener('click', async (event) => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      const response = await apiFetch('/api/users/me/resend-verification', { method: 'POST' });
+      if (response.ok) {
+        showToast('Verification email sent. Check your inbox.');
+        button.textContent = 'Email sent';
+        return;
+      }
+      showToast(await readError(response), 'error');
+    } catch (error) {
+      networkError(error);
+    }
+    button.disabled = false;
+  });
+
+  // Image Preview Handler
+  const pictureInput = document.getElementById('pictureInput');
+  const imagePreview = document.getElementById('imagePreview');
+  const uploadBtn = document.getElementById('uploadPictureBtn');
+
+  pictureInput.addEventListener('change', (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      imagePreview.src = URL.createObjectURL(file);
+      imagePreview.classList.remove('d-none');
+      uploadBtn.disabled = false;
+    } else {
+      imagePreview.classList.add('d-none');
+      uploadBtn.disabled = true;
+    }
+  });
+
+  // Upload Profile Picture Handler
+  uploadBtn.addEventListener('click', async () => {
+    const file = pictureInput.files[0];
+    if (!file) {
+      return;
+    }
+
+    // Use FormData for file uploads (not JSON)
+    const formData = new FormData();
+    formData.append('file', file);
+
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = 'Uploading…';
+
+    try {
+      const response = await apiFetch(`/api/users/${currentUserId}/picture`, {
+        method: 'PATCH',
+        // Don't set Content-Type - browser sets multipart boundary automatically
+        body: formData,
+      });
+
+      if (response.ok) {
+        queueToast('Profile picture updated!');
+        window.location.reload();
+        return;
+      }
+      showToast(await readError(response), 'error');
+    } catch (error) {
+      networkError(error);
+    }
+    uploadBtn.disabled = pictureInput.files.length === 0;
+    uploadBtn.textContent = 'Upload';
+  });
+
+  // Remove Profile Picture Handler
+  document.getElementById('removePictureBtn')?.addEventListener('click', async () => {
+    const confirmed = await confirmDialog({
+      title: 'Remove profile picture?',
+      message: 'Your profile will show the default picture instead.',
+      confirmText: 'Remove',
+    });
+    if (!confirmed) return;
+    try {
+      const response = await apiFetch(`/api/users/${currentUserId}/picture`, { method: 'DELETE' });
+      if (response.ok) {
+        queueToast('Profile picture removed.');
+        window.location.reload();
+        return;
+      }
+      showToast(await readError(response), 'error');
+    } catch (error) {
+      networkError(error);
+    }
+  });
+
+  // Update Profile Form Handler
+  const updateForm = document.getElementById('updateProfileForm');
+  updateForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!updateForm.checkValidity()) {
+      updateForm.classList.add('was-validated');
+      return;
+    }
+
+    const formData = new FormData(updateForm);
+    const userData = Object.fromEntries(formData.entries());
+
+    try {
+      const response = await apiFetch(`/api/users/${currentUserId}`, {
+        method: 'PATCH',
+        json: userData,
+      });
+
+      if (response.ok) {
+        queueToast('Profile updated!');
+        window.location.reload();
+        return;
+      }
+      showToast(await readError(response), 'error');
+    } catch (error) {
+      networkError(error);
+    }
+  });
+
+  // Change Password Handler
+  const changePasswordForm = document.getElementById('changePasswordForm');
+  const changePasswordBtn = document.getElementById('changePasswordBtn');
+  const newPassword = document.getElementById('newPassword');
+  const confirmNewPassword = document.getElementById('confirmNewPassword');
+
+  const checkMatch = () => {
+    confirmNewPassword.setCustomValidity(
+      newPassword.value === confirmNewPassword.value ? '' : 'Passwords do not match',
+    );
+  };
+  newPassword.addEventListener('input', checkMatch);
+  confirmNewPassword.addEventListener('input', checkMatch);
+
+  changePasswordForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    checkMatch();
+    if (!changePasswordForm.checkValidity()) {
+      changePasswordForm.classList.add('was-validated');
+      return;
+    }
+
+    // Disable button during submission
+    changePasswordBtn.disabled = true;
+    changePasswordBtn.textContent = 'Changing…';
+
+    try {
+      const response = await apiFetch('/api/users/me/password', {
+        method: 'PATCH',
+        json: {
+          current_password: document.getElementById('currentPassword').value,
+          new_password: newPassword.value,
+        },
+      });
+
+      if (response.ok) {
+        changePasswordForm.reset();
+        changePasswordForm.classList.remove('was-validated');
+        showToast('Password changed. Other devices have been signed out.');
+      } else {
+        showToast(await readError(response), 'error');
+      }
+    } catch (error) {
+      networkError(error);
+    } finally {
+      // Re-enable button
+      changePasswordBtn.disabled = false;
+      changePasswordBtn.textContent = 'Change Password';
+    }
+  });
+
+  // Log out everywhere
+  document.getElementById('logoutAllBtn').addEventListener('click', async () => {
+    const confirmed = await confirmDialog({
+      title: 'Log out of all devices?',
+      message: 'You will be signed out everywhere, including this browser.',
+      confirmText: 'Log out everywhere',
+    });
+    if (!confirmed) return;
+    try {
+      const response = await apiFetch('/api/users/me/logout-all', { method: 'POST' });
+      if (response.status === 204) {
+        queueToast('Signed out of all devices.', 'info');
+        window.location.href = '/login';
+        return;
+      }
+      showToast(await readError(response), 'error');
+    } catch (error) {
+      networkError(error);
+    }
+  });
+
+  // Delete Account Handler
+  document.getElementById('deleteAccountBtn').addEventListener('click', async () => {
+    const confirmed = await confirmDialog({
+      title: 'Delete account?',
+      message: 'This cannot be undone. All your posts and comments will be permanently deleted.',
+      confirmText: 'Delete my account',
+    });
+    if (!confirmed) return;
+
+    try {
+      const response = await apiFetch(`/api/users/${currentUserId}`, { method: 'DELETE' });
+      if (response.status === 204) {
+        queueToast('Your account has been deleted.', 'info');
+        window.location.href = '/';
+        return;
+      }
+      showToast(await readError(response), 'error');
+    } catch (error) {
+      networkError(error);
+    }
+  });
+    </script>
+{% endblock scripts %}

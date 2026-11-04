@@ -19,29 +19,14 @@
             <div class="empty-state-icon text-danger mb-3">{{ icon("alert", size=40) }}</div>
             <h1 class="h3">Link invalid or expired</h1>
             <p class="text-body-secondary" id="verifyErrorMessage">
-                This verification link can't be used. You can request a new one using the button below.
+                This verification link can't be used. You can request a new one from your account settings.
             </p>
-            {% if current_user %}
-                <button type="button" id="resendVerification" class="btn btn-primary">Send verification email</button>
-            {% else %}
-                <a class="btn btn-primary" href="{{ url_for('login_page') }}?next=/verify-email">Log in to request a new link</a>
-            {% endif %}
+            <a class="btn btn-primary" href="{{ url_for('account_page') }}">Go to account settings</a>
         </div>
     </div>
 {% endblock content %}
 {% block scripts %}
     <script type="module">
-      import { apiFetch, readError, showToast } from '/static/js/utils.js';
-      document.getElementById('resendVerification')?.addEventListener('click', async (event) => {
-        const button = event.currentTarget;
-        button.disabled = true;
-        try {
-          const response = await apiFetch('/api/users/me/resend-verification', { method: 'POST' });
-          showToast(response.ok ? 'Verification email sent.' : await readError(response), response.ok ? 'success' : 'error');
-        } catch (error) {
-          if (error.name !== 'AuthRedirectError') showToast('Could not send verification email. Try again.', 'error');
-        } finally { button.disabled = false; }
-      });
       const token = new URLSearchParams(window.location.search).get('token');
       // Don't leave the token sitting in the address bar / history
       window.history.replaceState(null, '', '/verify-email');

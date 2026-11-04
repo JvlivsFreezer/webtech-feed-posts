@@ -143,8 +143,34 @@ async def test_logout_all_revokes_every_session(make_user):
     assert (await alice.get("/api/users/me")).status_code == 401
 
 
+async def test_change_password_keeps_current_session_but_ends_others(make_user):
+    alice = await make_user("alice")
+    old_token = alice.token
+
+    response = await alice.patch(
+        "/api/users/me/password",
+        json={"current_password": PASSWORD, "new_password": "new-password-1"},
+    )
+    assert response.status_code == 200
+
+    # This browser got fresh cookies...
+    assert (await alice.get("/api/users/me")).status_code == 200
+    # ...but the old token is revoked
+    async with new_client() as api:
+        response = await api.get(
+            "/api/users/me",
+            headers={"Authorization": f"Bearer {old_token}"},
+        )
+        assert response.status_code == 401
 
 
+async def test_change_password_rejects_wrong_current_password(make_user):
+    alice = await make_user("alice")
+    response = await alice.patch(
+        "/api/users/me/password",
+        json={"current_password": "nope-nope", "new_password": "new-password-1"},
+    )
+    assert response.status_code == 400
 
 
 async def test_database_outage_gives_clear_error(client):

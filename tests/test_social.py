@@ -68,8 +68,28 @@ async def test_bookmarks_list_newest_first(make_user):
     assert [p["title"] for p in data["posts"]] == ["Second"]
 
 
+async def test_deleting_user_fixes_like_counts(make_user, client):
+    alice = await make_user("alice")
+    bob = await make_user("bob")
+    post = await create_post(alice)
+    await bob.post(f"/api/posts/{post['id']}/like")
+
+    assert (await bob.delete(f"/api/users/{bob.user['id']}")).status_code == 204
+    assert (await client.get(f"/api/posts/{post['id']}")).json()["likes"] == 0
 
 
+async def test_deleting_user_removes_their_posts_and_comments(make_user, client):
+    alice = await make_user("alice")
+    bob = await make_user("bob")
+    alices_post = await create_post(alice, tags=["python"])
+    await bob.post(f"/api/posts/{alices_post['id']}/comments", json={"content": "Nice"})
+    await alice.post(f"/api/users/{bob.user['id']}/follow")
+
+    assert (await bob.delete(f"/api/users/{bob.user['id']}")).status_code == 204
+    assert (await client.get(f"/api/posts/{alices_post['id']}")).json()["comments_count"] == 0
+
+    assert (await alice.delete(f"/api/users/{alice.user['id']}")).status_code == 204
+    assert (await client.get(f"/api/posts/{alices_post['id']}")).status_code == 404
 
 
 async def test_comments_crud(make_user, client):
@@ -176,3 +196,22 @@ async def test_profile_stats(make_user, client):
     anonymous = (await client.get(f"/api/users/{alice.user['id']}")).json()
     assert anonymous["followed_by_me"] is False
     assert "email" not in anonymous
+
+
+async def test_update_bio(make_user):
+    alice = await make_user("alice")
+    response = await alice.patch(
+        f"/api/users/{alice.user['id']}",
+        json={"bio": "  I write about Python.  "},
+    )
+    assert response.status_code == 200
+    assert response.json()["bio"] == "I write about Python."
+
+    # Updating another field leaves the bio alone; an empty bio clears it
+    response = await alice.patch(f"/api/users/{alice.user['id']}", json={"username": "alice2"})
+    assert response.json()["bio"] == "I write about Python."
+    response = await alice.patch(f"/api/users/{alice.user['id']}", json={"bio": ""})
+    assert response.json()["bio"] is None
+
+    response = await alice.patch(f"/api/users/{alice.user['id']}", json={"bio": "x" * 301})
+    assert response.status_code == 422

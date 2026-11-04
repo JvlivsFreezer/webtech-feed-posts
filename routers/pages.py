@@ -320,6 +320,18 @@ async def register_page(request: Request, viewer: OptionalUser):
     )
 
 
+@router.get("/account", name="account_page")
+async def account_page(request: Request, viewer: OptionalUser):
+    if viewer is None:
+        return login_redirect(request)
+    return templates.TemplateResponse(
+        request,
+        "account.html",
+        {
+            "title": "Account",
+            "require_verification": settings.require_email_verification,
+        },
+    )
 
 
 @router.get("/forgot-password", name="forgot_password_page")

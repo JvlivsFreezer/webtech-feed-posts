@@ -81,9 +81,11 @@ async def test_unknown_url_404_page_still_has_nav(make_user):
 
 async def test_profile_page(make_user, client):
     alice = await make_user("alice")
+    await alice.patch(f"/api/users/{alice.user['id']}", json={"bio": "Hello, I'm Alice"})
     await create_post(alice, title="Alice's Post")
 
     html = (await client.get(f"/users/{alice.user['id']}/posts")).text
+    assert "Hello, I&#39;m Alice" in html
     assert "Joined" in html
     assert "Alice&#39;s Post" in html
     assert "Followers" in html
@@ -109,7 +111,7 @@ async def test_tag_page(make_user, client):
 
 
 async def test_login_required_pages_redirect(client):
-    for path in ("/feed", "/bookmarks"):
+    for path in ("/feed", "/bookmarks", "/account"):
         response = await client.get(path)
         assert response.status_code == 303
         assert response.headers["location"].startswith("/login?next=")
